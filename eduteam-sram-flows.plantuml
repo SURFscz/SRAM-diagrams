@@ -1,0 +1,102 @@
+@startuml SRAM Service login flow
+
+skinparam defaultFontName DejaVu Sans
+skinparam ParticipantPadding 70
+
+participant Service as sp
+'box "SRAM" #LightBlue
+participant EduTEAMS as proxy
+participant SBS as sbs
+'end box
+participant IdP as idp
+
+!procedure $idp_login($text, $open_session = 1, $close_session = 1)
+	proxy -> idp: AuthN Request
+	note over idp: $text
+	!if $open_session
+		activate idp
+	!endif
+	idp -> proxy: AuthN Response
+	!if $close_session
+		deactivate idp
+	!endif
+!endprocedure
+
+!procedure $authz_check($return)
+	proxy --> sbs: AuthZ Request
+	activate sbs
+	note over sbs: authZ check
+	sbs --> proxy: $return
+	deactivate sbs
+!endprocedure
+
+
+== Happy flow ==
+
+sp -> proxy: AuthN Request
+activate proxy
+$idp_login("user login")
+
+|||
+
+$authz_check("AuthZ OK + Entitlements")
+
+proxy -> sp: AuthN Response + Entitlements
+deactivate proxy
+
+== Permission Denied flow ==
+
+sp -> proxy: AuthN Request
+activate proxy
+$idp_login("user login")
+
+|||
+
+$authz_check("AuthZ interrupt")
+
+|||
+
+proxy -> sbs: redirect
+deactivate proxy
+rnote right #ffaaaa: error page
+
+== Interrupted flow ==
+
+sp -> proxy: AuthN Request
+activate proxy
+$idp_login("user login", 1, 0)
+
+|||
+
+$authz_check("Interrupt + redirect_url")
+
+|||
+
+proxy -> sbs: Redirect
+deactivate proxy
+activate sbs
+alt#eac4ed  #F6DA44
+    sbs -> sbs: accept platform AUP
+else #f9e885
+	sbs -> sbs: accept service AUP
+else #fdf6ce
+    sbs -> sbs: enter TOTP
+end
+sbs -> proxy: continue
+deactivate sbs
+activate proxy
+
+|||
+
+$idp_login("SSO", 0, 1)
+
+|||
+
+$authz_check("AuthZ OK + Entitlements")
+deactivate sbs
+
+proxy -> sp: AuthN Response + Entitlements
+deactivate proxy
+
+
+@enduml
